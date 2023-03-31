@@ -5,8 +5,10 @@ void setup() {
   Serial.begin(115200);
   esp_task_wdt_init(WDT_TIMEOUT_S, true);
   esp_task_wdt_add(NULL);
+  #ifdef MANUAL_TIME
   configTime(0, 0, NTP_SERVER);
   influx_client.setWriteOptions(WriteOptions().writePrecision(WritePrecision::S));
+  #endif
   WiFi.mode(WIFI_STA);
  
   #ifndef ECO_MODE
@@ -70,11 +72,14 @@ void readTemperatureandHumidity_task(void * parameters){
     Serial.println("[TEMP] CONNECTED");
     Serial.println("[TEMP] SENDING:");
     #endif
-
-    while(((epochTime = getTime()) < 1679509487) ||
-          isnan(humidity_f=ESP32_dht11_sensor.readHumidity()) || 
-          isnan(temperature_f=ESP32_dht11_sensor.readTemperature()));
-
+    #ifdef MANUAL_TIME
+    while((epochTime = Get_Epoch_Time_s()) < 1680299493);
+    #endif
+    do{
+      vTaskDelay(30);
+      humidity_f = ESP32_dht11_sensor.readHumidity();
+      temperature_f = ESP32_dht11_sensor.readTemperature();
+    } while ( isnan(humidity_f) || isnan(temperature_f));
     pubToMQTT(temperature_f,humidity_f, epochTime);
     sendToInflux(temperature_f,humidity_f, epochTime);
 
@@ -259,9 +264,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 void pubToMQTT(float temperature_f, float humidity_f, unsigned long long timestamp){
   char payload[256];
-  doc["timestamp"] = timestamp;
   doc["temperature"] = temperature_f;
   doc["humidity"] = humidity_f;
+  #ifdef MANUAL_TIME
+  doc["time"] = timestamp;
+  #endif
   size_t n = serializeJson(doc, payload);
   if(mqtt_client.publish(TEMP_TOPIC, payload, n)){
     #ifdef VERBOSE
@@ -269,8 +276,11 @@ void pubToMQTT(float temperature_f, float humidity_f, unsigned long long timesta
     Serial.print(temperature_f);
     Serial.print("C/");
     Serial.print(humidity_f);
-    Serial.print("% ");
+    Serial.print("%");
+    #ifdef MANUAL_TIME
+    Serial.print(" ");
     Serial.print(timestamp);
+    #endif
     Serial.print(") PUBLISHED TO ");
     Serial.println(TEMP_TOPIC);
   }
@@ -279,8 +289,11 @@ void pubToMQTT(float temperature_f, float humidity_f, unsigned long long timesta
     Serial.print(temperature_f);
     Serial.print("C/");
     Serial.print(humidity_f);
-    Serial.print("% ");
-     Serial.print(timestamp);
+    Serial.print("%");
+    #ifdef MANUAL_TIME
+    Serial.print(" ");
+    Serial.print(timestamp);
+    #endif
     Serial.println(")");
   #endif
   }
@@ -290,28 +303,34 @@ void sendToInflux(float temperature_f, float humidity_f, unsigned long long time
   DHT11_sensor.clearFields();
   DHT11_sensor.addField("temperature_f", temperature_f);
   DHT11_sensor.addField("humidity_f", humidity_f);
+  #ifdef MANUAL_TIME
   DHT11_sensor.setTime(timestamp);
+  #endif
 
   if (!influx_client.writePoint(DHT11_sensor)) {
     #ifdef VERBOSE
     Serial.print("[INFLUXDB] ERROR DATA NOT SENT (");
-    Serial.print(timestamp);
-    Serial.print("/");
     Serial.print(temperature_f);
     Serial.print("C/");
     Serial.print(humidity_f);
     Serial.print("%");
-    Serial.print(")");
+    #ifdef MANUAL_TIME
+    Serial.print(" ");
+    Serial.print(timestamp);
+    #endif
+    Serial.println(")");
     Serial.println(influx_client.getLastErrorMessage());
   }
   else {
     Serial.print("[INFLUXDB] NEW DATA (");
-    Serial.print(timestamp);
-    Serial.print("/");
     Serial.print(temperature_f);
     Serial.print("C/");
     Serial.print(humidity_f);
     Serial.print("%");
+    #ifdef MANUAL_TIME
+    Serial.print(" ");
+    Serial.print(timestamp);
+    #endif
     Serial.print(") SENT TO ");
     Serial.println(INFLUXDB_URL);
     #endif
@@ -330,8 +349,14 @@ unsigned long long getTime() {
   return now;
 }
 
-int64_t xx_time_get_time() {
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	return (tv.tv_sec * 1000LL + (tv.tv_usec / 1000LL));
+inline unsigned long long Get_Epoch_Time_ms() {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return (unsigned long long)tv.tv_sec*1000LL+tv.tv_usec/1000;
+}
+
+inline unsigned long long Get_Epoch_Time_s() {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return (unsigned long long)tv.tv_sec;
 }

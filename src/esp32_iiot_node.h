@@ -29,7 +29,8 @@ void goToDeepSleep();
 void pubToMQTT(float, float, unsigned long long);
 void sendToInflux(float, float, unsigned long long);
 unsigned long long getTime();
-int64_t xx_time_get_time();
+unsigned long long Get_Epoch_Time_ms();
+unsigned long long Get_Epoch_Time_s();
 
 
 WiFiClient esp32_WiFiClient;
