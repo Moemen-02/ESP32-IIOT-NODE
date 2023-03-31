@@ -10,7 +10,8 @@
 #include <ArduinoJson.h>
 #include <esp_task_wdt.h>
 #include <stdarg.h>
-#include <auth.h> // Replace with #include <auth_1.h>
+#include "def.h"
+#include "auth.h" // Replace with #include "auth_1.h"
                   // and add your wifi, MQTT server and InfluxDB server credentials to auth_1.h
 
 TaskHandle_t readTemperatureandHumidity_handle = NULL;
